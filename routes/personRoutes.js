@@ -1,21 +1,58 @@
 const express = require("express");
 const router = express.Router();
 const Person = require("./../modules/person");
+const { jwtAuthMiddleware, generateToken } = require("./../jwt");
 
-router.post("/", async (req, res) => {
+router.post("/signup", async (req, res) => {
   try {
     const data = req.body;
     const newPerson = new Person(data);
     response = await newPerson.save();
     console.log("data saved");
-    res.status(200).json(response);
+
+    const payload = {
+      id: response.id,
+      username: response.username,
+    };
+    console.log("Payload: ", JSON.stringify(payload));
+    const token = generateToken(payload);
+    console.log("Token is: ", token);
+
+    res.status(200).json({ response: response, token: token });
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-router.get("/", async (req, res) => {
+//Login Route
+router.post("/login", async (req, res) => {
+  try {
+    //Extract username and password from the request bodu;
+    const { username, password } = req.body;
+
+    //Find the user by username
+    const user = await Person.findOne({ username: username });
+    if (!user || !(await user.comparePassword(password))) {
+      res.status(401).json({ error: "Invalid usesrname or password" });
+    }
+
+    //generate token;
+    const payload = {
+      id: user.id,
+      username: user.username,
+    };
+    const token = generateToken(payload);
+
+    //Return token as response
+    res.json({ token });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/", jwtAuthMiddleware, async (req, res) => {
   try {
     const data = await Person.find();
     console.log("data fetched");
@@ -23,6 +60,22 @@ router.get("/", async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+router.get("/profile", jwtAuthMiddleware, async (req, res) => {
+  try {
+    const userData = req.user;
+    console.log("User Data: ", userData);
+
+    const userId = userData.id;
+    const user = await Person.findById(userId);
+
+    res.status(200).json({ user });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({error:'Internal server error'})
+    
   }
 });
 
